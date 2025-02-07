@@ -1,0 +1,10 @@
+<h1>{{ quiz.title }}</h1>
+<form method="POST">
+  {% for question in questions %}
+    <h4>{{ loop.index }}. {{ question.text }}</h4>
+    {% for option in question.options.split(",") %}
+      <input type="radio" name="question-{{ question.id }}" value="{{ option }}"> {{ option }}<br>
+    {% endfor %}
+  {% endfor %}
+  <button type="submit">Submit</button>
+</form>

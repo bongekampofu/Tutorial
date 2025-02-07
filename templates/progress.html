@@ -1,0 +1,17 @@
+<h1>Your Progress</h1>
+<table>
+  <thead>
+    <tr>
+      <th>Quiz</th>
+      <th>Score (%)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for record in progress_records %}
+      <tr>
+        <td>{{ record.quiz.title }}</td>
+        <td>{{ record.score }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>

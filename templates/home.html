@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+</head>
+<body>
+    <h1>Welcome to the Tutorials</h1>
+    <ul>
+        {% for tutorial in tutorials %}
+            <li>
+                <h3>{{ tutorial.title }}</h3>
+                <p>{{ tutorial.description }}</p>
+                <!-- Link to read the tutorial online -->
+                <a href="{{ url_for('read_online', filename=tutorial.file_url) }}">Read Online</a> <br>
+
+
+                <!-- Link to download the tutorial -->
+                <a href="{{ url_for('download', filename=tutorial.file_url.split('/')[-1]) }}">Download</a>
+            </li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('upload') }}">Upload a Tutorial</a> <br>
+
+    <a href="{{ url_for('register') }}">Register</a> <br>
+    <a href="{{ url_for('logout') }}">Logout</a> <br>
+    <a href="{{ url_for('login') }}">Login</a>
+</body>
+</html>
