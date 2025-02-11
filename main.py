@@ -61,7 +61,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///C:\\Users\\Bongeka.Mpofu\\DB 
 
 app.config['SECRET_KEY'] = 'this is a secret key '
 app.config['SQLALCHEMY_ECHO'] = True
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
 db = SQLAlchemy(app)
 login_manager.init_app(app)
@@ -106,6 +106,18 @@ class Question(db.Model):
     options = db.Column(db.String(300), nullable=False)
     quiz = db.relationship('Quiz', back_populates='questions')
 
+class Progress(db.Model):
+    __tablename__ = "progress"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
+    score = db.Column(db.Float, nullable=False)
+    timestamp = db.Column(db.DateTime, default=dt.utcnow)
+
+    user = db.relationship('User', backref=db.backref('progress', lazy=True))
+    quiz = db.relationship('Quiz', backref=db.backref('progress', lazy=True))
+
+
 
 class Markbook(db.Model):
     __tablename__ = "markbook"
@@ -114,12 +126,11 @@ class Markbook(db.Model):
     quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
     score = db.Column(db.Float, nullable=False)
 
-
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Forms
+
 class RegistrationForm(FlaskForm):
     __tablename__ = "registrationform"
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
@@ -192,6 +203,32 @@ def login():
     return render_template("login.html", form=form)
 
 
+@app.route("/create_sample_data")
+def create_sample_data():
+    # Add a quiz
+    quiz = Quiz(title="Python Basics")
+    db.session.add(quiz)
+    db.session.commit()
+
+    # Add questions
+    question1 = Question(
+        quiz_id=quiz.id,
+        text="What is the output of print(100 * 2)?",
+        correct_answer="200",
+        options="200,102,5,None"
+    )
+    question2 = Question(
+        quiz_id=quiz.id,
+        text="What is the keyword for defining a function in Python?",
+        correct_answer="def",
+        options="def,function,lambda,fun"
+    )
+    db.session.add_all([question1, question2])
+    db.session.commit()
+
+    flash("Sample data created!", "success")
+    return redirect(url_for("quizzes"))
+
 
 @app.route("/quiz/<int:quiz_id>", methods=["GET", "POST"])
 @login_required
@@ -228,33 +265,6 @@ def take_quiz(quiz_id):
 def progress():
     progress_records = Progress.query.filter_by(user_id=current_user.id).all()
     return render_template("progress.html", progress_records=progress_records)
-
-
-@app.route("/create_sample_data")
-def create_sample_data():
-    # Add a quiz
-    quiz = Quiz(title="Python Basics")
-    db.session.add(quiz)
-    db.session.commit()
-
-    # Add questions
-    question1 = Question(
-        quiz_id=quiz.id,
-        text="What is the output of print(2 * 3)?",
-        correct_answer="6",
-        options="6,23,5,None"
-    )
-    question2 = Question(
-        quiz_id=quiz.id,
-        text="What is the keyword for defining a function in Python?",
-        correct_answer="def",
-        options="def,function,lambda,fun"
-    )
-    db.session.add_all([question1, question2])
-    db.session.commit()
-
-    flash("Sample data created!", "success")
-    return redirect(url_for("quizzes"))
 
 
 @app.route('/read_online/<filename>')
@@ -330,15 +340,14 @@ def upload():
     return render_template("upload.html", form=form)
 
 
-
 @app.route("/templates/<template>")
 def show_template(template):
     return render_template(template)
-
 
 if __name__ == "__main__":
     app_dir = op.realpath(os.path.dirname(__file__))
     with app.app_context():
         db.create_all()
+        #create_sample_data()
     app.run(debug=True)
 
