@@ -1,10 +1,23 @@
-<h1>{{ quiz.title }}</h1>
+<html>
 <form method="POST">
-  {% for question in questions %}
-    <h4>{{ loop.index }}. {{ question.text }}</h4>
-    {% for option in question.options.split(",") %}
-      <input type="radio" name="question-{{ question.id }}" value="{{ option }}"> {{ option }}<br>
+    {{ form.hidden_tag() }} <!-- CSRF token -->
+
+    {% for question in questions %}
+        <div class="question">
+            <h4>{{ question.text }}</h4>
+            <div>
+                {% set field_name = 'question_' + question.id|string %}
+                <div>
+                    {{ form[field_name] }}  <!-- This properly renders the radio field -->
+                </div>
+            </div>
+        </div>
     {% endfor %}
-  {% endfor %}
-  <button type="submit">Submit</button>
+
+    <button type="submit">Submit</button>
 </form>
+
+
+
+</html>
+
