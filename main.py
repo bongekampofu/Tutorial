@@ -5,6 +5,10 @@ from datetime import datetime as dt
 from sqlalchemy import Column, Integer, DateTime
 from flask import Flask, render_template, send_from_directory, url_for, redirect, request
 from flask_wtf import FlaskForm
+import pandas as pd
+
+
+
 #from flask_sqlalchemy import Pagination
 
 from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextAreaField
@@ -155,6 +159,15 @@ class TutorialForm(FlaskForm):
     submit = SubmitField('Upload Tutorial')
 
 
+class QuizUploadForm(FlaskForm):
+    title = StringField('Title', validators=[DataRequired()])
+    description = TextAreaField('Description', validators=[DataRequired()])
+    file = FileField('Upload Quiz File', validators=[FileAllowed(['xlsx'], 'Excel files only!')])
+    submit = SubmitField('Upload Quiz')
+
+
+
+
 
 # Routes
 @app.route("/")
@@ -302,6 +315,77 @@ def download(filename):
 def quizzes():
     quizzes = Quiz.query.all()
     return render_template("quizzes.html", quizzes=quizzes)
+
+
+import pandas as pd
+
+
+@app.route("/upload_quiz", methods=["GET", "POST"])
+@login_required
+def upload_quiz():
+    form = QuizUploadForm()
+
+    if form.validate_on_submit():
+        file = form.file.data
+
+        # Check if file was uploaded
+        if not file:
+            flash("No file selected! Please choose a file.", "danger")
+            return redirect(url_for("upload_quiz"))
+
+        filename = secure_filename(file.filename)
+
+        # Ensure a valid filename
+        if filename == "":
+            flash("Invalid file selected! Please choose a valid file.", "danger")
+            return redirect(url_for("upload_quiz"))
+
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        try:
+            file.save(file_path)
+            print(f"File saved at: {file_path}")  # Debugging step
+
+            # Process the Excel file
+            df = pd.read_excel(file_path)
+            print(f"Excel file columns: {df.columns}")  # Debugging step
+            print(df.head())  # Check the contents of the Excel file
+
+            if 'Title' not in df.columns or 'Question' not in df.columns or 'Correct Answer' not in df.columns or 'Options' not in df.columns:
+                flash('Invalid file format. Ensure the columns: Title, Question, Correct Answer, Options exist.', 'danger')
+                return redirect(url_for("upload_quiz"))
+
+            # Create a new quiz
+            quiz_title = df.iloc[0]['Title']
+            quiz = Quiz(title=quiz_title)
+            db.session.add(quiz)
+            db.session.commit()  # Save quiz first to get its ID
+
+            print(f"Quiz Created: {quiz.id}, Title={quiz.title}")  # Debugging step
+
+            # Add questions to the quiz
+            for _, row in df.iterrows():
+                question = Question(
+                    quiz_id=quiz.id,  # Reference the created quiz ID
+                    text=row['Question'],
+                    correct_answer=row['Correct Answer'],
+                    options=row['Options']
+                )
+                db.session.add(question)
+
+                # Debugging step to check what is being added
+                print(f"Adding Question: {row['Question']}")
+
+            db.session.commit()  # Save all the questions at once
+            flash("Quiz uploaded successfully!", "success")
+            return redirect(url_for("quizzes"))
+
+        except Exception as e:
+            flash(f"Error processing file: {str(e)}", "danger")
+            print(f"Exception: {str(e)}")  # Debugging step
+
+    return render_template("upload_quiz.html", form=form)
+
 
 
 @app.route("/logout")
