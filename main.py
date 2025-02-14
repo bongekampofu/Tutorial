@@ -5,7 +5,16 @@ from datetime import datetime as dt
 from sqlalchemy import Column, Integer, DateTime
 from flask import Flask, render_template, send_from_directory, url_for, redirect, request
 from flask_wtf import FlaskForm
+from wtforms import RadioField
+from wtforms import Form, RadioField
+from wtforms.validators import InputRequired
 import pandas as pd
+from flask import render_template, request, redirect, url_for, flash
+from flask_login import login_required, current_user
+from wtforms import RadioField
+from wtforms.validators import InputRequired
+
+
 
 
 
@@ -130,11 +139,6 @@ class Markbook(db.Model):
     quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
     score = db.Column(db.Float, nullable=False)
 
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-
 class RegistrationForm(FlaskForm):
     __tablename__ = "registrationform"
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
@@ -166,6 +170,36 @@ class QuizUploadForm(FlaskForm):
     submit = SubmitField('Upload Quiz')
 
 
+
+class QuizForm(FlaskForm):
+    # Define a field for each question, making sure it's a RadioField for choices
+    # This will be dynamically populated in your template
+
+    submit = SubmitField('Submit Quiz')
+
+    def __init__(self, *args, **kwargs):
+        super(QuizForm, self).__init__(*args, **kwargs)
+        # Dynamically add radio fields for each question in the quiz
+        self.questions_fields = []
+
+class BaseQuizForm(FlaskForm):
+    submit = SubmitField("Submit")
+
+def create_quiz_form(questions):
+    """Dynamically generates a WTForms class with RadioFields for each question."""
+    class DynamicQuizForm(BaseQuizForm):
+        pass  # Placeholder to attach fields dynamically
+
+    for question in questions:
+        choices = [(option.strip(), option.strip()) for option in question.options.split(",")]
+        field = RadioField(question.text, choices=choices, validators=[InputRequired()])
+        setattr(DynamicQuizForm, f'question_{question.id}', field)
+
+    return DynamicQuizForm()
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 
 
@@ -243,23 +277,30 @@ def create_sample_data():
     return redirect(url_for("quizzes"))
 
 
+
 @app.route("/quiz/<int:quiz_id>", methods=["GET", "POST"])
 @login_required
 def take_quiz(quiz_id):
     quiz = Quiz.query.get_or_404(quiz_id)
     questions = quiz.questions
+    form = create_quiz_form(questions)  # Use dynamically generated form
 
-    if request.method == "POST":
+    if form.validate_on_submit():
         score = 0
         total_questions = len(questions)
+        correct_answers = {}  # Dictionary to store correct answers
 
-        # Check each question
         for question in questions:
-            user_answer = request.form.get(f"question-{question.id}")
-            if user_answer and user_answer == question.correct_answer:
+            user_answer = request.form.get(f"question_{question.id}")
+            correct_answer = question.correct_answer.strip()
+
+            # Store correct answer for display
+            correct_answers[question.id] = correct_answer
+
+            if user_answer == correct_answer:
                 score += 1
 
-        # Calculate percentage
+        # Calculate percentage score
         score_percentage = (score / total_questions) * 100
 
         # Save progress
@@ -270,7 +311,9 @@ def take_quiz(quiz_id):
         flash(f"You scored {score_percentage:.2f}%", "success")
         return redirect(url_for("progress"))
 
-    return render_template("quiz.html", quiz=quiz, questions=questions)
+    return render_template("quiz.html", quiz=quiz, questions=questions, form=form)
+
+
 
 
 @app.route("/progress")
