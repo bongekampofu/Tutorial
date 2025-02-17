@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h2>{{ user.username }}'s Profile</h2>
+<p>Points: {{ points }}</p>
+
+<h3>Badges Earned</h3>
+<ul>
+    {% for badge in badges %}
+        <li>{{ badge.name }}: {{ badge.description }}</li>
+    {% endfor %}
+</ul>
+
+<table>
+  <thead>
+    <tr>
+      <th>Quiz</th>
+      <th>Score (%)</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for record in progress_records %}
+      <tr>
+        <td>{{ record.quiz.title }}</td>
+        <td>{{ record.score }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Score Trend</h3>
+<canvas id="scoreGraph" width="400" height="200"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const ctx = document.getElementById('scoreGraph').getContext('2d');
+  const data = {
+    labels: {{ dates | tojson }},
+    datasets: [{
+      label: 'Scores (%)',
+      data: {{ scores | tojson }},
+      borderColor: 'rgba(75, 192, 192, 1)',
+      borderWidth: 1,
+      fill: false,
+      tension: 0.1
+    }]
+  };
+
+  const config = {
+    type: 'line',  // Use 'bar' if you want a bar chart instead
+    data: data,
+    options: {
+      responsive: true,
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: 'Date'
+          },
+          type: 'category',
+          labels: {{ dates | tojson }}
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'Score (%)'
+          },
+          min: 0,
+          max: 100
+        }
+      }
+    }
+  };
+
+  const scoreChart = new Chart(ctx, config);
+</script>
+
+{% endblock %}
+

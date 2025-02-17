@@ -4,28 +4,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Upload Tutorial</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 </head>
-<body>
-    <h1>Upload Tutorial</h1>
-    <form method="POST" enctype="multipart/form-data">
-    {{ form.hidden_tag() }}
-    <div class="form-group">
-        {{ form.title.label }}
-        {{ form.title() }}
-    </div>
-    <div class="form-group">
-        {{ form.description.label }}
-        {{ form.description() }}
-    </div>
-    <div class="form-group">
-        {{ form.file.label }}
-        {{ form.file() }}
-    </div>
-    <div class="form-group">
-        <button type="submit" class="btn btn-primary">Upload</button>
-    </div>
-</form>
+<body class="container mt-5">
 
-    <a href="{{ url_for('home') }}">Back to Home</a>
+    <h1 class="mb-4">Upload Tutorial</h1>
+
+    <div class="card p-4 shadow-sm">
+        <!-- Title Text Box -->
+        <div class="mb-3">
+            <label for="title" class="form-label">Title</label>
+            <input type="text" id="title" class="form-control" placeholder="Enter Tutorial Title">
+        </div>
+
+        <!-- Description Text Box -->
+        <div class="mb-3">
+            <label for="description" class="form-label">Description</label>
+            <textarea id="description" class="form-control" rows="3" placeholder="Enter Description"></textarea>
+        </div>
+
+        <!-- File Input Box -->
+        <div class="mb-3">
+            <label for="file" class="form-label">Upload File</label>
+            <input type="file" id="file" class="form-control">
+        </div>
+
+        <!-- Upload Button -->
+        <button class="btn btn-primary">Upload</button>
+    </div>
+
+    <a href="{{ url_for('home') }}" class="btn btn-secondary mt-3">Back to Home</a>
+
+    <!-- Bootstrap JS (Optional, for advanced components) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>
