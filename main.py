@@ -59,6 +59,7 @@ import logging
 #for xml files
 from xml.etree.ElementTree import Element, SubElement, tostring, ElementTree
 from datetime import datetime as dt
+import matplotlib as plt
 
 
 admin = Admin()
@@ -87,13 +88,26 @@ UPLOAD_FOLDER = os.path.join('static', 'uploads')  # Point to the uploads subfol
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
-# moodels abd tables
+# moodels and tables
 class User(db.Model, UserMixin):
     __tablename__ = "user"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
+    badges = db.relationship('Badge', secondary='user_badge', backref=db.backref('users', lazy="dynamic"))
+
+class Badge(db.Model):
+    __tablename__ = "badge"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)  # Ensure unique names
+    description = db.Column(db.String(255), nullable=False)
+
+class UserBadge(db.Model):
+    __tablename__ = 'user_badge'
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete="CASCADE"), primary_key=True)
+    badge_id = db.Column(db.Integer, db.ForeignKey('badge.id', ondelete="CASCADE"), primary_key=True)
+
 
 class Tutorial(db.Model):
     __tablename__ = "tutorial"
@@ -196,6 +210,100 @@ def create_quiz_form(questions):
         setattr(DynamicQuizForm, f'question_{question.id}', field)
 
     return DynamicQuizForm()
+#ddiscussion forums
+class DiscussionThread(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=dt.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    user = db.relationship('User', backref=db.backref('threads', lazy=True))
+
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=dt.utcnow)
+    thread_id = db.Column(db.Integer, db.ForeignKey('discussion_thread.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    thread = db.relationship('DiscussionThread', backref=db.backref('comments', lazy=True, cascade="all, delete"))
+    user = db.relationship('User', backref=db.backref('comments', lazy=True))
+class ThreadForm(FlaskForm):
+    title = StringField('Title', validators=[DataRequired(), Length(max=255)])
+    content = TextAreaField('Content', validators=[DataRequired()])
+    submit = SubmitField('Create Thread')
+
+class CommentForm(FlaskForm):
+    content = TextAreaField('Comment', validators=[DataRequired()])
+    submit = SubmitField('Post Comment')
+#end of discussion forums
+
+# Model for user points
+class UserPoints(db.Model):
+    __tablename__ = "user_points"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    points = db.Column(db.Integer, default=0)
+    user = db.relationship('User', backref=db.backref('points', lazy=True))
+
+    @hybrid_property
+    def total_points(self):
+        return self.points
+
+# Points management functions outside of the model class
+def add_points(user_id, points_to_add):
+    """Adds points to a user and awards a badge if they reach 70 points."""
+    user = User.query.get(user_id)
+    if not user:
+        return
+
+    user_points = UserPoints.query.filter_by(user_id=user_id).first()
+    if not user_points:
+        user_points = UserPoints(user_id=user_id, points=0)
+        db.session.add(user_points)
+
+    user_points.points += points_to_add
+    db.session.commit()
+
+    # Award badge if user reaches 70 points
+    if user_points.points >= 70:
+        award_badge(user_id)
+
+
+def user_has_badge(user_id, badge_id):
+    # Check if the user already has the badge
+    return db.session.query(UserBadge).filter_by(user_id=user_id, badge_id=badge_id).first() is not None
+
+def award_badge(user_id, badge_name="Super Achiever"):
+    """Assigns a badge to the user if they do not already have it."""
+    user = User.query.get(user_id)
+    if not user:
+        return
+
+    # Check if the badge already exists in the database
+    badge = Badge.query.filter_by(name=badge_name).first()
+    if not badge:
+        badge = Badge(name=badge_name, description="Awarded for earning 70 points or more.")
+        db.session.add(badge)
+        db.session.commit()
+
+    # Ensure user doesn't already have the badge
+    if badge not in user.badges:
+        user.badges.append(badge)
+        db.session.commit()
+        flash(f"Congratulations! You've earned the '{badge_name}' badge!", "success")
+
+
+
+
+
+def complete_quiz(user_id, quiz_id):
+    points = 10  # Example points for completing a quiz
+    add_points(user_id, points)
+
+
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -203,10 +311,11 @@ def load_user(user_id):
 
 
 
-# Routes
-@app.route("/")
+@app.route('/')
 def home():
+    #print(f"User authenticated: {current_user.is_authenticated}")
     tutorials = Tutorial.query.all()
+
     return render_template("home.html", tutorials=tutorials)
 
 @app.route("/register", methods=["GET", "POST"])
@@ -285,6 +394,9 @@ def take_quiz(quiz_id):
     questions = quiz.questions
     form = create_quiz_form(questions)  # Use dynamically generated form
 
+    # Get the user's current points to display on the page
+    points = current_user.points
+
     if form.validate_on_submit():
         score = 0
         total_questions = len(questions)
@@ -308,10 +420,25 @@ def take_quiz(quiz_id):
         db.session.add(progress)
         db.session.commit()
 
+        # Add points after quiz completion
+        complete_quiz(current_user.id, quiz.id)
+
         flash(f"You scored {score_percentage:.2f}%", "success")
         return redirect(url_for("progress"))
 
-    return render_template("quiz.html", quiz=quiz, questions=questions, form=form)
+    return render_template("quiz.html", quiz=quiz, questions=questions, form=form, points=points)
+
+
+# Points page for viewing the user's points
+@app.route("/points")
+@login_required
+def points():
+    user_points = UserPoints.query.filter_by(user_id=current_user.id).first()
+    if user_points:
+        points = user_points.total_points
+    else:
+        points = 0  # If no points exist for the user yet
+    return render_template("points.html", points=points)
 
 
 
@@ -352,15 +479,49 @@ def download(filename):
         abort(404)
 
 
-
 @app.route("/quizzes")
 @login_required
 def quizzes():
     quizzes = Quiz.query.all()
-    return render_template("quizzes.html", quizzes=quizzes)
+    user_points = UserPoints.query.filter_by(user_id=current_user.id).first()
+
+    # Default points to 0 if not found
+    points = user_points.points if user_points else 0
+    print(points)
+
+    return render_template("quizzes.html", quizzes=quizzes, points=points)
+
+@app.route("/profile")
+@login_required
+def profile():
+    user = current_user
+    badges = user.badges
+    quizzes = Quiz.query.all()
+    user_points = UserPoints.query.filter_by(user_id=current_user.id).first()
+    points = user_points.points if user_points else 0
+    progress_records = Progress.query.filter_by(user_id=current_user.id).all()
+
+    # Prepare data for the graph
+    dates = []
+    scores = []
+    for record in progress_records:
+        date = record.timestamp.date()  # Extract the date
+        dates.append(date)
+        scores.append(record.score)
+
+    return render_template("profile.html", user=user, badges=badges, points=points, progress_records=progress_records, dates=dates, scores=scores)
 
 
-import pandas as pd
+
+@app.route("/create_badge")
+def create_badge():
+    badge = Badge.query.filter_by(name="Super Achiever").first()
+    if not badge:
+        badge = Badge(name="Super Achiever", description="Awarded for earning 70 points or more.")
+        db.session.add(badge)
+        db.session.commit()
+        flash("Badge 'Super Achiever' created!", 'success')
+    return redirect(url_for("home"))
 
 
 @app.route("/upload_quiz", methods=["GET", "POST"])
@@ -465,6 +626,39 @@ def upload():
         else:
             flash('No file uploaded. Please upload a valid file.', 'danger')
     return render_template("upload.html", form=form)
+
+#discussion forums
+@app.route("/forum")
+@login_required
+def forum():
+    threads = DiscussionThread.query.order_by(DiscussionThread.created_at.desc()).all()
+    return render_template("forum.html", threads=threads)
+
+@app.route("/forum/new", methods=["GET", "POST"])
+@login_required
+def new_thread():
+    form = ThreadForm()
+    if form.validate_on_submit():
+        thread = DiscussionThread(title=form.title.data, content=form.content.data, user_id=current_user.id)
+        db.session.add(thread)
+        db.session.commit()
+        flash('Discussion thread created!', 'success')
+        return redirect(url_for('forum'))
+    return render_template("new_thread.html", form=form)
+
+@app.route("/forum/<int:thread_id>", methods=["GET", "POST"])
+@login_required
+def thread(thread_id):
+    thread = DiscussionThread.query.get_or_404(thread_id)
+    form = CommentForm()
+    if form.validate_on_submit():
+        comment = Comment(content=form.content.data, thread_id=thread.id, user_id=current_user.id)
+        db.session.add(comment)
+        db.session.commit()
+        flash('Comment posted!', 'success')
+        return redirect(url_for('thread', thread_id=thread.id))
+    return render_template("thread.html", thread=thread, form=form)
+#end of discussion forums
 
 
 @app.route("/templates/<template>")
